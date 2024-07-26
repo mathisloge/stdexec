@@ -530,7 +530,7 @@ endif()
 
 include(CPack)
 
-install(TARGETS stdexec system_context
+install(TARGETS stdexec
 	EXPORT stdexec-exports
 	FILE_SET headers
 	FILE_SET version_config)
