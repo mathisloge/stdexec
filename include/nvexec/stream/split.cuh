@@ -13,20 +13,28 @@
  * See the License for the specific language governing permissions and
  * limitations under the License.
  */
+
+// clang-format Language: Cpp
+
 #pragma once
 
-#include <atomic>
 #include "../../stdexec/execution.hpp"
-#include "../../exec/env.hpp"
+
+#include <atomic>
+#include <memory>
+#include <optional>
 #include <type_traits>
 
+#include <cuda/std/tuple>
+
 #include "common.cuh"
+#include "../detail/cuda_atomic.cuh" // IWYU pragma: keep
 #include "../detail/throw_on_cuda_error.cuh"
 
 STDEXEC_PRAGMA_PUSH()
 STDEXEC_PRAGMA_IGNORE_EDG(cuda_compile)
 
-namespace nvexec::STDEXEC_STREAM_DETAIL_NS {
+namespace nvexec::_strm {
   namespace _split {
     inline auto __make_env(
       const inplace_stop_source& stop_source,
@@ -92,6 +100,7 @@ namespace nvexec::STDEXEC_STREAM_DETAIL_NS {
           sh_state_.notify();
         }
 
+        [[nodiscard]]
         auto get_env() const noexcept -> env_t {
           return sh_state_.make_env();
         }
@@ -110,7 +119,7 @@ namespace nvexec::STDEXEC_STREAM_DETAIL_NS {
     };
 
     template <class T>
-    T* malloc_managed(cudaError_t& status) {
+    auto malloc_managed(cudaError_t& status) -> T* {
       T* ptr{};
 
       if (status == cudaSuccess) {
@@ -197,14 +206,14 @@ namespace nvexec::STDEXEC_STREAM_DETAIL_NS {
         }
       }
 
-      env_t make_env() const noexcept {
+      auto make_env() const noexcept -> env_t {
         return _split::__make_env(stop_source_, &const_cast<stream_provider_t&>(stream_provider_));
       }
 
       void notify() noexcept {
         void* const completion_state = static_cast<void*>(this);
         void* old = head_.exchange(completion_state, std::memory_order_acq_rel);
-        operation_base_t* op_state = static_cast<operation_base_t*>(old);
+        auto* op_state = static_cast<operation_base_t*>(old);
 
         while (op_state != nullptr) {
           operation_base_t* next = op_state->next_;
@@ -334,7 +343,7 @@ namespace nvexec::STDEXEC_STREAM_DETAIL_NS {
       using completion_signatures = //
         __try_make_completion_signatures<
           Sender,
-          exec::make_env_t<stdexec::prop<get_stop_token_t, inplace_stop_token>>,
+          stdexec::prop<get_stop_token_t, inplace_stop_token>,
           stdexec::completion_signatures<set_error_t(const cudaError_t&)>,
           __q<_set_value_t>,
           __q<_set_error_t>>;
@@ -348,6 +357,7 @@ namespace nvexec::STDEXEC_STREAM_DETAIL_NS {
         return operation_t<Receiver>{static_cast<Receiver&&>(rcvr), shared_state_};
       }
 
+      [[nodiscard]]
       auto get_env() const noexcept -> env_of_t<const Sender&> {
         return stdexec::get_env(sndr_);
       }
@@ -358,12 +368,24 @@ namespace nvexec::STDEXEC_STREAM_DETAIL_NS {
       }
     };
   };
-} // namespace nvexec::STDEXEC_STREAM_DETAIL_NS
+
+  template <>
+  struct transform_sender_for<split_t> {
+    template <class Sender>
+    using _sender_t = __t<split_sender_t<__id<__decay_t<Sender>>>>;
+
+    template <class Env, stream_completing_sender Sender>
+    auto operator()(__ignore, Env&& /*env*/, Sender&& sndr) const -> _sender_t<Sender> {
+      auto sched = get_completion_scheduler<set_value_t>(get_env(sndr));
+      return _sender_t<Sender>{sched.context_state_, static_cast<Sender&&>(sndr)};
+    }
+  };
+} // namespace nvexec::_strm
 
 namespace stdexec::__detail {
   template <class SenderId>
-  extern __mconst<nvexec::STDEXEC_STREAM_DETAIL_NS::split_sender_t<__name_of<__t<SenderId>>>>
-    __name_of_v<nvexec::STDEXEC_STREAM_DETAIL_NS::split_sender_t<SenderId>>;
+  extern __mconst<nvexec::_strm::split_sender_t<__name_of<__t<SenderId>>>>
+    __name_of_v<nvexec::_strm::split_sender_t<SenderId>>;
 } // namespace stdexec::__detail
 
 STDEXEC_PRAGMA_POP()

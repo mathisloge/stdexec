@@ -15,12 +15,12 @@
  */
 #pragma once
 
-#include "__execution_fwd.hpp" // IWYU pragma: keep
+#include "__execution_fwd.hpp"
 
 #include "__config.hpp"
 #include "__concepts.hpp"
-#include "__sender_introspection.hpp"
 #include "__env.hpp"
+#include "__sender_introspection.hpp"
 #include "__meta.hpp"
 
 #include "../functional.hpp"
@@ -55,7 +55,7 @@ namespace stdexec {
     template <class _DomainOrTag, class _Sender, class... _Env>
     concept __has_transform_sender =
       requires(_DomainOrTag __tag, _Sender&& __sender, const _Env&... __env) {
-        __tag.transform_sender(static_cast<_Sender&&>(__sender), __env...);
+        __tag.transform_sender(static_cast<_Sender &&>(__sender), __env...);
       };
 
     template <class _Sender, class... _Env>
@@ -65,7 +65,7 @@ namespace stdexec {
 
     template <class _Type, class _Sender, class _Env>
     concept __has_transform_env = requires(_Type __obj, _Sender&& __sender, _Env&& __env) {
-      __obj.transform_env(static_cast<_Sender&&>(__sender), static_cast<_Env&&>(__env));
+      __obj.transform_env(static_cast<_Sender &&>(__sender), static_cast<_Env &&>(__env));
     };
 
     template <class _Sender, class _Env>
@@ -75,11 +75,11 @@ namespace stdexec {
 
     template <class _DomainOrTag, class... _Args>
     concept __has_apply_sender = requires(_DomainOrTag __tag, _Args&&... __args) {
-      __tag.apply_sender(static_cast<_Args&&>(__args)...);
+      __tag.apply_sender(static_cast<_Args &&>(__args)...);
     };
 
     template <class _Sender>
-    constexpr bool __is_nothrow_transform_sender() noexcept {
+    constexpr auto __is_nothrow_transform_sender() noexcept -> bool {
       if constexpr (__callable<__sexpr_apply_t, _Sender, __domain::__legacy_customization>) {
         return __nothrow_callable<__sexpr_apply_t, _Sender, __domain::__legacy_customization>;
       } else if constexpr (__domain::__has_default_transform_sender<_Sender>) {
@@ -90,7 +90,7 @@ namespace stdexec {
     }
 
     template <class _Sender, class _Env>
-    constexpr bool __is_nothrow_transform_sender() noexcept {
+    constexpr auto __is_nothrow_transform_sender() noexcept -> bool {
       if constexpr (__domain::__has_default_transform_sender<_Sender, _Env>) {
         return //
           noexcept(
@@ -215,13 +215,19 @@ namespace stdexec {
 
   /////////////////////////////////////////////////////////////////////////////
   inline constexpr struct __get_late_domain_t {
-    // When connect is looking for a customization, it first checks the sender's
-    // domain. If the sender knows the domain in which it completes, then that is
-    // where the subsequent task will execute. Otherwise, look to the receiver for
-    // late-bound information about the current execution context.
+    // When connect is looking for a customization, it first checks the sender's domain. If the
+    // sender knows the domain in which it completes, then that is where the subsequent task will
+    // execute. Otherwise, look to the receiver for late-bound information about the current
+    // execution context.
     template <class _Sender, class _Env>
     auto operator()(const _Sender& __sndr, const _Env& __env) const noexcept {
-      if constexpr (!same_as<dependent_domain, __early_domain_of_t<_Sender, dependent_domain>>) {
+      // The schedule_from algorithm is the exception to the rule. It ignores the domain of the
+      // predecessor, and dispatches based on the domain of the scheduler to which execution is
+      // being transferred.
+      if constexpr (sender_expr_for<_Sender, schedule_from_t>) {
+        return query_or(get_domain, __sexpr_apply(__sndr, __detail::__get_data()), default_domain());
+      } else if constexpr (
+        !same_as<dependent_domain, __early_domain_of_t<_Sender, dependent_domain>>) {
         return __get_early_domain(__sndr);
       } else if constexpr (__callable<get_domain_t, const _Env&>) {
         return get_domain(__env);
@@ -230,17 +236,6 @@ namespace stdexec {
       } else {
         return default_domain();
       }
-    }
-
-    // The continues_on algorithm is the exception to the rule. It ignores the
-    // domain of the predecessor, and dispatches based on the domain of the
-    // scheduler to which execution is being transferred.
-    template <sender_expr_for<continues_on_t> _Sender, class _Env>
-    auto operator()(const _Sender& __sndr, const _Env&) const noexcept {
-      return __sexpr_apply(__sndr, [](__ignore, auto& __data, __ignore) noexcept {
-        auto __sched = get_completion_scheduler<set_value_t>(__data);
-        return query_or(get_domain, __sched, default_domain());
-      });
     }
   } __get_late_domain{};
 
