@@ -625,3 +625,5 @@ rapids_export(
   NAMESPACE STDEXEC::
   FINAL_CODE_BLOCK code_string
 )
+
+install(DIRECTORY include/ TYPE INCLUDE)
