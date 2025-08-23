@@ -38,7 +38,7 @@
 namespace stdexec {
   /////////////////////////////////////////////////////////////////////////////
   // [execution.senders.adaptors.on]
-  namespace __on_v2 {
+  namespace __on {
     inline constexpr __mstring __on_context = "In stdexec::on(Scheduler, Sender)..."_mstr;
     inline constexpr __mstring __no_scheduler_diag =
       "stdexec::on() requires a scheduler to transition back to."_mstr;
@@ -143,39 +143,41 @@ namespace stdexec {
       STDEXEC_ATTRIBUTE(always_inline)
       static auto __transform_sender_fn(const _Env& __env) noexcept {
         return [&]<class _Data, class _Child>(__ignore, _Data&& __data, _Child&& __child) {
-          if constexpr (scheduler<_Data>) {
-            // This branch handles the case where `on` was called like `on(sch, snd)`
-            auto __old = query_or(get_scheduler, __env, __none_such{});
-            if constexpr (__same_as<decltype(__old), __none_such>) {
-              if constexpr (__is_root_env<_Env>) {
-                return continues_on(
-                  starts_on(static_cast<_Data&&>(__data), static_cast<_Child&&>(__child)),
-                  __inln::__scheduler{});
-              } else {
-                return __none_such{};
-              }
-            } else {
-              return continues_on(
-                starts_on(static_cast<_Data&&>(__data), static_cast<_Child&&>(__child)),
-                static_cast<decltype(__old)&&>(__old));
-            }
+          // If __is_root_env<_Env> is true, then this sender has no parent, so there is
+          // no need to restore the execution context. We can use the inline scheduler
+          // as the scheduler if __env does not have one.
+          using __default_t = __if_c<__is_root_env<_Env>, inline_scheduler, __none_such>;
+
+          // If scheduler<_Data> is true, then this sender was created with `on(sch, sndr)`.
+          // In that case, the child sender is not a predecessor, so its completion
+          // scheduler is not the one we want to restore. If scheduler<_Data> is false,
+          // then this sender was created with `sndr | on(sch, clsur)`. The child sender
+          // *is* a predecessor, so we can use its completion scheduler to restore the
+          // execution context.
+          using __query_t =
+            __if_c<scheduler<_Data>, __none_such, get_completion_scheduler_t<set_value_t>>;
+
+          // Fetch the scheduler on which this operation will be started, and to which
+          // execution should be restored:
+          auto __old =
+            query_or(__query_t{}, get_env(__child), query_or(get_scheduler, __env, __default_t{}));
+
+          if constexpr (__same_as<decltype(__old), __none_such>) {
+            return __none_such{};
+          } else if constexpr (scheduler<_Data>) {
+            // This branch handles the case where `on` was called like `on(sch, sndr)`
+            return continues_on(
+              starts_on(static_cast<_Data&&>(__data), static_cast<_Child&&>(__child)),
+              static_cast<decltype(__old)&&>(__old));
           } else {
-            // This branch handles the case where `on` was called like `on(snd, sch, clsur)`
-            auto __old = query_or(
-              get_completion_scheduler<set_value_t>,
-              get_env(__child),
-              query_or(get_scheduler, __env, __none_such{}));
-            if constexpr (__same_as<decltype(__old), __none_such>) {
-              return __none_such{};
-            } else {
-              auto&& [__sched, __clsur] = static_cast<_Data&&>(__data);
-              return __write_env(
-                continues_on(
-                  __forward_like<_Data>(__clsur)(continues_on(
-                    __write_env(static_cast<_Child&&>(__child), __with_sched{__old}), __sched)),
-                  __old),
-                __with_sched{__sched});
-            }
+            // This branch handles the case where `on` was called like `sndr | on(sch, clsur)`
+            auto&& [__sched, __clsur] = static_cast<_Data&&>(__data);
+            return write_env(
+              continues_on(
+                __forward_like<_Data>(__clsur)(continues_on(
+                  write_env(static_cast<_Child&&>(__child), __with_sched{__old}), __sched)),
+                __old),
+              __with_sched{__sched});
           }
         };
       }
@@ -200,18 +202,19 @@ namespace stdexec {
         }
       }
     };
-  } // namespace __on_v2
+  } // namespace __on
+
+  using __on::on_t;
+  inline constexpr on_t on{};
 
   namespace v2 {
-    using __on_v2::on_t;
-    inline constexpr on_t on{};
-
-    using continue_on_t = v2::on_t;
-    inline constexpr continue_on_t continue_on{}; // for back-compat
+    using on_t [[deprecated("use stdexec::on_t instead")]] = stdexec::on_t;
+    [[deprecated("use stdexec::on instead")]]
+    inline constexpr stdexec::on_t const & on = stdexec::on;
   } // namespace v2
 
   template <>
-  struct __sexpr_impl<v2::on_t> : __sexpr_defaults {
+  struct __sexpr_impl<on_t> : __sexpr_defaults {
     static constexpr auto get_completion_signatures = []<class _Sender>(_Sender&&) noexcept
       -> __merror_or_t<
         __completion_signatures_of_t<transform_sender_result_t<default_domain, _Sender, env<>>>,

@@ -36,6 +36,9 @@ set(stdexec_test_sources
     stdexec/algos/factories/test_just_stopped.cpp
     stdexec/algos/factories/test_read.cpp
     stdexec/algos/adaptors/test_starts_on.cpp
+    stdexec/algos/adaptors/test_on.cpp
+    stdexec/algos/adaptors/test_on2.cpp
+    stdexec/algos/adaptors/test_on3.cpp
     stdexec/algos/adaptors/test_continues_on.cpp
     stdexec/algos/adaptors/test_schedule_from.cpp
     stdexec/algos/adaptors/test_then.cpp
@@ -69,6 +72,9 @@ set_target_properties(common_test_settings PROPERTIES
     MSVC_DEBUG_INFORMATION_FORMAT Embedded
     )
 target_include_directories(common_test_settings INTERFACE "${CMAKE_CURRENT_LIST_DIR}")
+target_compile_definitions(
+    common_test_settings INTERFACE
+    $<$<NOT:$<AND:$<CXX_COMPILER_ID:NVHPC>,$<COMPILE_LANGUAGE:CXX>>>:STDEXEC_ENABLE_EXTRA_TYPE_CHECKING>)
 
 add_executable(test.stdexec ${stdexec_test_sources})
 target_link_libraries(test.stdexec

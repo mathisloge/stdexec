@@ -1,5 +1,7 @@
 cmake_minimum_required(VERSION 3.25.0)
 
+set(ENV{SCCACHE_NO_DIST_COMPILE} "1")
+
 if(POLICY CMP0135)
   # make the timestamps of ExternalProject_ADD match the download time
   # https://cmake.org/cmake/help/latest/policy/CMP0135.html
@@ -66,11 +68,6 @@ message(STATUS "Library ver      : ${STDEXEC_VERSION}")
 message(STATUS "Build date       : ${STDEXEC_BUILD_DATE}")
 message(STATUS "Build year       : ${STDEXEC_BUILD_YEAR}")
 message(STATUS)
-
-if (STDEXEC_IS_TOP_LEVEL)
-  # Integrate with LLVM/clang tooling
-  include(${CMAKE_CURRENT_SOURCE_DIR}/cmake/clangd_compile_info.cmake)
-endif()
 
 # Write the version header
 rapids_cmake_write_version_file(include/stdexec_version_config.hpp)
@@ -231,7 +228,7 @@ add_library(stdexec_executable_flags INTERFACE)
 
 # Enable warnings
 target_compile_options(stdexec_executable_flags INTERFACE
-                       $<$<STREQUAL:${stdexec_compiler_frontend},GNU>:-Wall>
+                       $<$<STREQUAL:${stdexec_compiler_frontend},GNU>:-Wall;-Werror=unused-parameter>
                        $<$<STREQUAL:${stdexec_compiler_frontend},AppleClang>:-Wall>
                        $<$<STREQUAL:${stdexec_compiler_frontend},MSVC>:/W4>)
 
@@ -270,9 +267,13 @@ target_compile_options(stdexec_executable_flags INTERFACE
                        -include stdexec/__detail/__force_include.hpp>
                        )
 
-target_compile_definitions(
-  stdexec_executable_flags INTERFACE
-  $<$<NOT:$<AND:$<CXX_COMPILER_ID:NVHPC>,$<COMPILE_LANGUAGE:CXX>>>:STDEXEC_ENABLE_EXTRA_TYPE_CHECKING>)
+if (STDEXEC_IS_TOP_LEVEL)
+  # Integrate with LLVM/clang tooling
+  include(${CMAKE_CURRENT_SOURCE_DIR}/cmake/clangd_compile_info.cmake)
+  add_executable(_clangd_helper_file
+    include/._clangd_helper_file.cpp
+  )
+endif()
 
 # Set up nvexec library
 option(STDEXEC_ENABLE_CUDA "Enable CUDA targets for non-nvc++ compilers" OFF)
@@ -282,10 +283,10 @@ if(CMAKE_CXX_COMPILER_ID STREQUAL "NVHPC")
     # Unset these if using nvc++
     disable_compiler(LANG CUDA)
 
-    set(_nvhpc_seperate_memory_flags "-gpu=nomanaged")
-    # if (CMAKE_CXX_COMPILER_VERSION VERSION_GREATER_EQUAL 24.5.0)
-    #     set(_nvhpc_seperate_memory_flags "-gpu=mem:separate")
-    # endif()
+    set(_nvhpc_seperate_memory_flags "-gpu=mem:separate")
+    if (CMAKE_CXX_COMPILER_VERSION VERSION_LESS 24.5.0)
+        set(_nvhpc_seperate_memory_flags "-gpu=nomanaged")
+    endif()
 endif()
 
 # Support target for examples and tests
@@ -312,6 +313,10 @@ if(STDEXEC_ENABLE_CUDA)
     target_compile_features(nvexec INTERFACE cuda_std_20)
     target_link_libraries(nvexec INTERFACE STDEXEC::stdexec)
 
+    if(NOT CMAKE_CUDA_ARCHITECTURES)
+      set(CMAKE_CUDA_ARCHITECTURES "native")
+    endif()
+
     set(_gpus)
     foreach(_arch IN LISTS CMAKE_CUDA_ARCHITECTURES)
       if(_arch MATCHES "-real")
@@ -321,6 +326,8 @@ if(STDEXEC_ENABLE_CUDA)
         string(REPLACE "-virtual" "" _arch "${_arch}")
         string(PREPEND _arch "cc")
       elseif(_arch MATCHES "^[0-9]+$")
+        string(PREPEND _arch "cc")
+      elseif(_arch MATCHES "^native$")
         string(PREPEND _arch "cc")
       endif()
       list(APPEND _gpus "${_arch}")
@@ -551,29 +558,32 @@ add_library(STDEXEC::system_context ALIAS system_context)
 target_link_libraries(system_context PUBLIC stdexec)
 
 
-if(CMAKE_CROSSCOMPILING)
-  CHECK_INCLUDE_FILE_CXX("linux/io_uring.h" STDEXEC_FOUND_IO_URING)
-else()
-  include(CheckCXXSourceRuns)
-  CHECK_CXX_SOURCE_RUNS(
-    "
-    #include <linux/io_uring.h>
-    #include <sys/syscall.h>
-    #include <unistd.h>
+option(STDEXEC_ENABLE_IO_URING "Enable the use of the io_uring scheduler on Linux" OFF)
 
-    #include <cstdlib>
+if(STDEXEC_ENABLE_IO_URING)
+  if(CMAKE_CROSSCOMPILING)
+    CHECK_INCLUDE_FILE_CXX("linux/io_uring.h" STDEXEC_ENABLE_IO_URING)
+  else()
+    include(CheckCXXSourceRuns)
+    CHECK_CXX_SOURCE_RUNS(
+      "
+      #include <linux/io_uring.h>
+      #include <sys/syscall.h>
+      #include <unistd.h>
 
-    int main()
-    {
-      io_uring_params a = {};
-      return syscall(__NR_io_uring_setup, 1, &a) != -1
-        ? EXIT_SUCCESS
-        : EXIT_FAILURE;
-    }
-    "
-    STDEXEC_FOUND_IO_URING)
+      #include <cstdlib>
+
+      int main()
+      {
+        io_uring_params a = {};
+        return syscall(__NR_io_uring_setup, 1, &a) != -1
+          ? EXIT_SUCCESS
+          : EXIT_FAILURE;
+      }
+      "
+      STDEXEC_ENABLE_IO_URING)
+  endif()
 endif()
-option(STDEXEC_ENABLE_IO_URING "Enable the use of the io_uring scheduler on Linux" ${STDEXEC_FOUND_IO_URING})
 
 option(STDEXEC_BUILD_DOCS "Build stdexec documentation" OFF)
 option(STDEXEC_BUILD_EXAMPLES "Build stdexec examples" ON)

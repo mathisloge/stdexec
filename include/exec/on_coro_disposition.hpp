@@ -21,7 +21,7 @@
 #include "../stdexec/execution.hpp"
 #include "../stdexec/coroutine.hpp"
 #include "task.hpp"
-#include "inline_scheduler.hpp"
+#include "inline_scheduler.hpp" // IWYU pragma: keep
 #include "any_sender_of.hpp"
 
 #include <exception>
@@ -183,7 +183,7 @@ namespace exec {
         using __get_disposition_callback_t = task_disposition (*)(void*) noexcept;
         __coro::coroutine_handle<> __parent_{};
         __get_disposition_callback_t __get_disposition_callback_{nullptr};
-        __any_scheduler __scheduler_{inline_scheduler{}};
+        __any_scheduler __scheduler_{stdexec::inline_scheduler{}};
       };
 
       __coro::coroutine_handle<__promise> __coro_;

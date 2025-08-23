@@ -90,7 +90,6 @@ namespace stdexec {
       }
 
       STDEXEC_ATTRIBUTE(host, device)
-
       void set_stopped() noexcept
         requires __one_of<set_stopped_t (*)(), _Sigs...>
       {
@@ -148,7 +147,8 @@ namespace stdexec {
             _COMPLETION_SIGNATURES_MISMATCH_,
             _COMPLETION_SIGNATURE_<_Sig>,
             _IS_NOT_ONE_OF_<_Sigs...>,
-            _SIGNAL_SENT_BY_SENDER_<__name_of<_Sender>>>;
+            _SIGNAL_SENT_BY_SENDER_<__name_of<_Sender>>
+          >;
           __debug::_ATTENTION_<_What>();
         }
       };

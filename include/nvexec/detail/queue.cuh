@@ -44,7 +44,6 @@ namespace nvexec::_strm::queue {
     task_base_t** tail_;
 
     STDEXEC_ATTRIBUTE(host, device)
-
     void operator()(task_base_t* task) {
       atom_task_ref tail_ref(*tail_);
       task_base_t* old_tail = tail_ref.load(::cuda::memory_order_acquire);
@@ -69,8 +68,7 @@ namespace nvexec::_strm::queue {
 
   struct root_task_t : task_base_t {
     root_task_t() {
-      this->execute_ = [](task_base_t* t) noexcept {
-      };
+      this->execute_ = [](task_base_t*) noexcept {};
       this->free_ = [](task_base_t* t) noexcept {
         STDEXEC_ASSERT_CUDA_API(cudaFree(static_cast<void*>(t->atom_next_)));
       };

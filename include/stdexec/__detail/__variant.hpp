@@ -21,7 +21,6 @@
 #include "__scope.hpp"
 
 #include <cstddef>
-#include <memory>
 #include <new>
 #include <utility>
 
@@ -47,8 +46,13 @@ namespace stdexec {
   struct __monostate { };
 
   namespace __var {
-    STDEXEC_ATTRIBUTE(host, device)
+    template <class _Ty>
+    STDEXEC_ATTRIBUTE(host, device, always_inline)
+    void __destroy_at(_Ty *ptr) noexcept {
+      ptr->~_Ty();
+    }
 
+    STDEXEC_ATTRIBUTE(host, device)
     inline auto __mk_index_guard(std::size_t &__index, std::size_t __new) noexcept {
       __index = __new;
       return __scope_guard{[&__index]() noexcept { __index = __variant_npos; }};
@@ -85,7 +89,7 @@ namespace stdexec {
       STDEXEC_ATTRIBUTE(host, device) void __destroy() noexcept {
         auto __index = std::exchange(__index_, __variant_npos);
         if (__variant_npos != __index) {
-          ((_Is == __index ? std::destroy_at(static_cast<_Ts *>(__get_ptr())) : void(0)), ...);
+          ((_Is == __index ? __var::__destroy_at(static_cast<_Ts *>(__get_ptr())) : void(0)), ...);
         }
       }
 

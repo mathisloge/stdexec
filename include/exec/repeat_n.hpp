@@ -22,6 +22,7 @@
 #include "../stdexec/__detail/__manual_lifetime.hpp"
 
 #include "trampoline_scheduler.hpp"
+#include "sequence.hpp"
 
 #include <atomic>
 #include <cstddef>
@@ -47,12 +48,26 @@ namespace exec {
 
         template <class... _Args>
         void set_value(_Args &&...__args) noexcept {
-          __state_->__complete(set_value_t(), static_cast<_Args &&>(__args)...);
+          STDEXEC_TRY {
+            __state_->__complete(set_value_t(), static_cast<_Args &&>(__args)...);
+          }
+          STDEXEC_CATCH_ALL {
+            if constexpr (!__nothrow_decay_copyable<_Args...>) {
+              __state_->__complete(set_error_t(), std::current_exception());
+            }
+          }
         }
 
         template <class _Error>
         void set_error(_Error &&__err) noexcept {
-          __state_->__complete(set_error_t(), static_cast<_Error &&>(__err));
+          STDEXEC_TRY {
+            __state_->__complete(set_error_t(), static_cast<_Error &&>(__err));
+          }
+          STDEXEC_CATCH_ALL {
+            if constexpr (!__nothrow_decay_copyable<_Error>) {
+              __state_->__complete(set_error_t(), std::current_exception());
+            }
+          }
         }
 
         void set_stopped() noexcept {
@@ -89,7 +104,7 @@ namespace exec {
       using __child_t = decltype(__child_count_pair_t::__child_);
       using __receiver_t = stdexec::__t<__receiver<__id<_Sender>, __id<_Receiver>>>;
       using __child_on_sched_sender_t =
-        __result_of<stdexec::starts_on, trampoline_scheduler, __child_t &>;
+        __result_of<exec::sequence, schedule_result_t<trampoline_scheduler &>, __child_t &>;
       using __child_op_t = stdexec::connect_result_t<__child_on_sched_sender_t, __receiver_t>;
 
       __child_count_pair<__child_t> __pair_;
@@ -108,7 +123,7 @@ namespace exec {
           std::atomic_thread_fence(std::memory_order_release);
           // TSan does not support std::atomic_thread_fence, so we
           // need to use the TSan-specific __tsan_release instead:
-          STDEXEC_TSAN(__tsan_release(&__started_));
+          STDEXEC_WHEN(STDEXEC_TSAN(), __tsan_release(&__started_));
           __child_op_.__destroy();
         }
       }
@@ -116,7 +131,7 @@ namespace exec {
       void __connect() {
         __child_op_.__construct_from([this] {
           return stdexec::connect(
-            stdexec::starts_on(__sched_, __pair_.__child_), __receiver_t{this});
+            exec::sequence(stdexec::schedule(__sched_), __pair_.__child_), __receiver_t{this});
         });
       }
 
@@ -124,9 +139,8 @@ namespace exec {
         if (__pair_.__count_ == 0) {
           stdexec::set_value(static_cast<_Receiver &&>(this->__receiver()));
         } else {
-
-          const bool __already_started [[maybe_unused]]
-          = __started_.test_and_set(std::memory_order_relaxed);
+          [[maybe_unused]]
+          const bool __already_started = __started_.test_and_set(std::memory_order_relaxed);
           STDEXEC_ASSERT(!__already_started);
           stdexec::start(__child_op_.__get());
         }
@@ -157,11 +171,8 @@ namespace exec {
 
     STDEXEC_PRAGMA_POP()
 
-    template <
-      __mstring _Where = "In repeat_n: "_mstr,
-      __mstring _What = "The input sender must be a sender of void"_mstr
-    >
-    struct _INVALID_ARGUMENT_TO_REPEAT_N_ { };
+    struct repeat_n_t;
+    struct _REPEAT_N_EXPECTS_A_SENDER_OF_VOID_;
 
     template <class _Sender, class... _Args>
     using __values_t =
@@ -169,7 +180,11 @@ namespace exec {
       std::conditional_t<
         (sizeof...(_Args) == 0),
         completion_signatures<>,
-        __mexception<_INVALID_ARGUMENT_TO_REPEAT_N_<>, _WITH_SENDER_<_Sender>>
+        __mexception<
+          _REPEAT_N_EXPECTS_A_SENDER_OF_VOID_,
+          _WHERE_(_IN_ALGORITHM_, repeat_n_t),
+          _WITH_SENDER_<_Sender>
+        >
       >;
 
     template <class _Error>
@@ -215,7 +230,6 @@ namespace exec {
       }
 
       STDEXEC_ATTRIBUTE(always_inline)
-
       constexpr auto
         operator()(std::size_t __count) const -> __binder_back<repeat_n_t, std::size_t> {
         return {{__count}, {}, {}};

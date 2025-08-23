@@ -174,7 +174,7 @@ namespace stdexec {
     >;
 
     template <class _AlgoTag>
-    struct __generic_bulk_t {
+    struct __generic_bulk_t { // NOLINT(bugprone-crtp-constructor-accessibility)
       template <sender _Sender, typename _Policy, integral _Shape, copy_constructible _Fun>
         requires is_execution_policy_v<std::remove_cvref_t<_Policy>>
       STDEXEC_ATTRIBUTE(host, device)
@@ -256,6 +256,7 @@ namespace stdexec {
     };
 
     struct bulk_chunked_t : __generic_bulk_t<bulk_chunked_t> { };
+
     struct bulk_unchunked_t : __generic_bulk_t<bulk_unchunked_t> { };
 
     template <class _AlgoTag>
