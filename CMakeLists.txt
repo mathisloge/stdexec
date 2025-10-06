@@ -480,8 +480,14 @@ if(STDEXEC_ENABLE_ASIO)
       set(BOOST_VERSION 1.86.0)
       rapids_cpm_find(Boost ${BOOST_VERSION}
         CPM_ARGS
+          SYSTEM ON
+          EXCLUDE_FROM_ALL ON
+          FIND_PACKAGE_ARGUMENTS "CONFIG"
           URL https://github.com/boostorg/boost/releases/download/boost-${BOOST_VERSION}/boost-${BOOST_VERSION}-cmake.tar.xz
-          OPTIONS "BOOST_SKIP_INSTALL_RULES OFF"
+          URL_HASH SHA256=2c5ec5edcdff47ff55e27ed9560b0a0b94b07bd07ed9928b476150e16b0efc57
+          OPTIONS 
+            "BOOST_ENABLE_CMAKE ON" 
+            "BOOST_SKIP_INSTALL_RULES ${CMAKE_SKIP_INSTALL_RULES}"
       )
 
       add_library(stdexec_boost_pool INTERFACE)
