@@ -127,10 +127,10 @@ namespace stdexec {
           // It's possible this is a dependent sender.
           return static_cast<dependent_completions (*)()>(nullptr);
         } else if constexpr ((__is_debug_env<_Env> || ...)) {
-          using __tag_invoke::tag_invoke;
           // This ought to cause a hard error that indicates where the problem is.
-          using _Completions
-            [[maybe_unused]] = tag_invoke_result_t<get_completion_signatures_t, _Sender, _Env...>;
+          using _Completions [[maybe_unused]] =
+            decltype(std::remove_reference_t<_TfxSender>::get_completion_signatures(
+              __declval<_TfxSender>(), __declval<_Env>()...));
           return static_cast<__debug::__completion_signatures (*)()>(nullptr);
         } else {
           using _Result = __mexception<
@@ -206,6 +206,11 @@ namespace stdexec {
         return true;
       }
 
+      template <class _OpState>
+      static constexpr void __check_operation_state() noexcept {
+        static_assert(operation_state<_OpState>, STDEXEC_ERROR_CANNOT_CONNECT_SENDER_TO_RECEIVER);
+      }
+
       template <class _Sender, class _Receiver>
       static constexpr auto __select_impl() noexcept {
         using _Domain = __late_domain_of_t<_Sender, env_of_t<_Receiver>>;
@@ -222,10 +227,7 @@ namespace stdexec {
 
         if constexpr (__with_static_member<_TfxSender, _Receiver>) {
           using _Result = __static_member_result_t<_TfxSender, _Receiver>;
-          static_assert(
-            operation_state<_Result>,
-            "Sender::connect(sender, receiver) must return a type that "
-            "satisfies the operation_state concept");
+          __check_operation_state<_Result>();
           constexpr bool _Nothrow = _NothrowTfxSender
                                  && noexcept(
                                       __declval<_TfxSender>()
@@ -233,20 +235,14 @@ namespace stdexec {
           return static_cast<_Result (*)() noexcept(_Nothrow)>(nullptr);
         } else if constexpr (__with_member<_TfxSender, _Receiver>) {
           using _Result = __member_result_t<_TfxSender, _Receiver>;
-          static_assert(
-            operation_state<_Result>,
-            "sender.connect(receiver) must return a type that "
-            "satisfies the operation_state concept");
+          __check_operation_state<_Result>();
           constexpr bool _Nothrow = _NothrowTfxSender
                                  && noexcept(__declval<_TfxSender>()
                                                .connect(__declval<_Receiver>()));
           return static_cast<_Result (*)() noexcept(_Nothrow)>(nullptr);
         } else if constexpr (__with_tag_invoke<_TfxSender, _Receiver>) {
           using _Result = tag_invoke_result_t<connect_t, _TfxSender, _Receiver>;
-          static_assert(
-            operation_state<_Result>,
-            "stdexec::connect(sender, receiver) must return a type that "
-            "satisfies the operation_state concept");
+          __check_operation_state<_Result>();
           constexpr bool _Nothrow = _NothrowTfxSender
                                  && nothrow_tag_invocable<connect_t, _TfxSender, _Receiver>;
           return static_cast<_Result (*)() noexcept(_Nothrow)>(nullptr);
