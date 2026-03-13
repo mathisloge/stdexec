@@ -34,9 +34,7 @@ if(STDEXEC_ENABLE_ASIO)
       INSTALL_EXPORT_SET stdexec-exports
       CPM_ARGS
         URL https://github.com/boostorg/boost/releases/download/boost-${BOOST_VERSION}/boost-${BOOST_VERSION}-cmake.tar.xz
-        EXCLUDE_FROM_ALL ON
-        SYSTEM ON
-        FIND_ARGS CONFIG
+        FIND_PACKAGE_ARGUMENTS "CONFIG"
         OPTIONS
           "BOOST_ENABLE_CMAKE ON"
           "BOOST_INCLUDE_LIBRARIES ${BOOST_INCLUDE_LIBRARIES}"
