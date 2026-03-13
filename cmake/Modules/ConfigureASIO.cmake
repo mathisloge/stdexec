@@ -30,6 +30,8 @@ if(STDEXEC_ENABLE_ASIO)
       GLOBAL_TARGETS
         Boost::system
         Boost::asio
+      BUILD_EXPORT_SET stdexec-exports
+      INSTALL_EXPORT_SET stdexec-exports
       CPM_ARGS
         URL https://github.com/boostorg/boost/releases/download/boost-${BOOST_VERSION}/boost-${BOOST_VERSION}-cmake.tar.xz
         EXCLUDE_FROM_ALL ON
@@ -38,7 +40,6 @@ if(STDEXEC_ENABLE_ASIO)
         OPTIONS
           "BOOST_ENABLE_CMAKE ON"
           "BOOST_INCLUDE_LIBRARIES ${BOOST_INCLUDE_LIBRARIES}"
-          "CMAKE_SKIP_INSTALL_RULES OFF"
     )
 
     add_library(asioexec INTERFACE)
