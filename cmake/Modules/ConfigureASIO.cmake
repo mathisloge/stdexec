@@ -63,7 +63,8 @@ if(STDEXEC_ENABLE_ASIO)
 
     target_link_libraries(asioexec INTERFACE
       STDEXEC::stdexec
-      Boost::asio
+      $<BUILD_INTERFACE:Boost::asio>
+      $<INSTALL_INTERFACE:Boost::asio>
     )
     install(TARGETS asioexec
       EXPORT stdexec-exports
