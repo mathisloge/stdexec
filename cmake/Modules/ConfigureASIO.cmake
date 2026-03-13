@@ -26,18 +26,12 @@ if(STDEXEC_ENABLE_ASIO)
   if(${STDEXEC_ASIO_USES_BOOST})
     set(BOOST_INCLUDE_LIBRARIES asio system)
     set(BOOST_VERSION 1.86.0)
-    rapids_cpm_find(Boost ${BOOST_VERSION}
-      GLOBAL_TARGETS
-        Boost::system
-        Boost::asio
-      BUILD_EXPORT_SET stdexec-exports
-      INSTALL_EXPORT_SET stdexec-exports
-      CPM_ARGS
-        URL https://github.com/boostorg/boost/releases/download/boost-${BOOST_VERSION}/boost-${BOOST_VERSION}-cmake.tar.xz
-        FIND_PACKAGE_ARGUMENTS "CONFIG"
-        OPTIONS
-          "BOOST_ENABLE_CMAKE ON"
-          "BOOST_INCLUDE_LIBRARIES ${BOOST_INCLUDE_LIBRARIES}"
+    CPMAddPackage(
+      NAME Boost
+      VERSION "${BOOST_VERSION}"
+      URL https://github.com/boostorg/boost/releases/download/boost-${BOOST_VERSION}/boost-${BOOST_VERSION}-cmake.tar.xz 
+      FIND_PACKAGE_ARGUMENTS "COMPONENTS system"
+      OPTIONS "BOOST_ENABLE_CMAKE ON;BOOST_SKIP_INSTALL_RULES OFF}"
     )
 
     add_library(asioexec INTERFACE)
